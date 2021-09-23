@@ -50,6 +50,7 @@ def load_datasource(datasource_name, reload=False):
     datasource['id'] = datasource.index
     datasource = datasource.replace(-np.Inf, 0)
     source = datasource_name
+    time_sec = time.time()
     print("Loading segmentation.")
     if config[datasource_name]['segmentation'].endswith('.zarr'):
         seg = zarr.load(config[datasource_name]['segmentation'])
@@ -64,7 +65,7 @@ def load_datasource(datasource_name, reload=False):
     except:
         metadata = {}
     channels = zarr.open(channel_io.series[0].aszarr())
-    print("Data loading done.")
+    print("Data loading done.", time.time() - time_sec)
 
 
 def load_config(datasource_name):
@@ -110,11 +111,11 @@ def load_ball_tree(datasource_name_name, reload=False):
     #     Path(
     #         os.path.join(os.getcwd())) / data_path / datasource_name_name / "ball_tree.pickle")
 
-    #using pathlib now:
+    # using pathlib now:
     pickled_kd_tree_path = str(
         PurePath(Path.cwd(), data_path, datasource_name_name, "ball_tree.pickle"))
 
-    #old os.path way:  if os.path.isfile(pickled_kd_tree_path) and reload is False:
+    # old os.path way:  if os.path.isfile(pickled_kd_tree_path) and reload is False:
     if Path(pickled_kd_tree_path).is_file() and reload is False:
 
         print("Pickled KD Tree Exists, Loading")
@@ -203,7 +204,7 @@ def get_phenotype_description(datasource):
         data = ''
         csvPath = config[datasource]['featureData'][0]['celltypeData']
         if Path(csvPath).is_file():
-        #old os.path usage: if os.path.isfile(csvPath):
+            # old os.path usage: if os.path.isfile(csvPath):
             data = pd.read_csv(csvPath)
             data = data.to_numpy().tolist()
             # data = data.to_json(orient='records', lines=True)
@@ -300,17 +301,16 @@ def get_number_of_cells_in_circle(x, y, datasource_name, r):
 
 
 def get_color_scheme(datasource_name, refresh, label_field='celltype'):
-
     # old os.path way:
     # color_scheme_path = str(
     #     Path(os.path.join(os.getcwd())) / data_path / datasource_name / str(
     #         label_field + "_color_scheme.pickle"))
 
     color_scheme_path = str(PurePath(Path.cwd(), data_path, datasource_name, str(
-            label_field + "_color_scheme.pickle")) )
+        label_field + "_color_scheme.pickle")))
 
     if refresh == False:
-        #old os.path way:  if os.path.isfile(color_scheme_path):
+        # old os.path way:  if os.path.isfile(color_scheme_path):
         if Path(color_scheme_path).is_file():
             print("Color Scheme Exists, Loading")
             color_scheme = pickle.load(open(color_scheme_path, "rb"))
@@ -488,9 +488,8 @@ def get_datasource_description(datasource_name):
     return description
 
 
-
-def spatial_corr (adata, raw=False, log=False, threshold=None, x_coordinate='X_centroid',y_coordinate='Y_centroid',
-                  marker=None, k=500, label='spatial_corr'):
+def spatial_corr(adata, raw=False, log=False, threshold=None, x_coordinate='X_centroid', y_coordinate='Y_centroid',
+                 marker=None, k=500, label='spatial_corr'):
     """
     Parameters
     ----------
@@ -526,9 +525,9 @@ def spatial_corr (adata, raw=False, log=False, threshold=None, x_coordinate='X_c
     data = pd.DataFrame({'x': bdata.obs[x_coordinate], 'y': bdata.obs[y_coordinate]})
     # user defined expression matrix
     if raw is True:
-        exp =  pd.DataFrame(bdata.raw.X, index= bdata.obs.index, columns=bdata.var.index)
+        exp = pd.DataFrame(bdata.raw.X, index=bdata.obs.index, columns=bdata.var.index)
     else:
-        exp =  pd.DataFrame(bdata.X, index= bdata.obs.index, columns=bdata.var.index)
+        exp = pd.DataFrame(bdata.X, index=bdata.obs.index, columns=bdata.var.index)
     # log the data if needed
     if log is True:
         exp = np.log1p(exp)
@@ -542,19 +541,20 @@ def spatial_corr (adata, raw=False, log=False, threshold=None, x_coordinate='X_c
             marker = [marker]
         exp = exp[marker]
     # find the nearest neighbours
-    tree = BallTree(data, leaf_size= 2)
-    dist, ind = tree.query(data, k=k, return_distance= True)
-    neighbours = pd.DataFrame(ind, index = bdata.obs.index)
+    tree = BallTree(data, leaf_size=2)
+    dist, ind = tree.query(data, k=k, return_distance=True)
+    neighbours = pd.DataFrame(ind, index=bdata.obs.index)
     # find the mean dist
     rad_approx = np.mean(dist, axis=0)
     # Calculate the correlation
     mean = np.mean(exp).values
     std = np.std(exp).values
     A = (exp - mean) / std
-    def corrfunc (marker, A, neighbours, ind):
+
+    def corrfunc(marker, A, neighbours, ind):
         print('Processing ' + str(marker))
         # Map phenotype
-        ind_values = dict(zip(list(range(len(ind))), A[marker])) # Used for mapping
+        ind_values = dict(zip(list(range(len(ind))), A[marker]))  # Used for mapping
         # Loop through (all functionized methods were very slow)
         neigh = neighbours.copy()
         for i in neigh.columns:
@@ -564,9 +564,10 @@ def spatial_corr (adata, raw=False, log=False, threshold=None, x_coordinate='X_c
         corrfunc = np.mean(Y, axis=1)
         # return
         return corrfunc
+
     # apply function to all markers    # Create lamda function
-    r_corrfunc = lambda x: corrfunc(marker=x,A=A, neighbours=neighbours, ind=ind)
-    all_data = list(map(r_corrfunc, exp.columns)) # Apply function
+    r_corrfunc = lambda x: corrfunc(marker=x, A=A, neighbours=neighbours, ind=ind)
+    all_data = list(map(r_corrfunc, exp.columns))  # Apply function
     # Merge all the results into a single dataframe
     df = pd.concat(all_data, axis=1)
     df.columns = exp.columns
