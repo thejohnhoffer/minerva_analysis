@@ -40,21 +40,6 @@ class ImageViewer {
         // Selection polygon (array of xy positions)
         this.selectionPolygonToDraw = [];
 
-        // Transfer function constant
-        this.numTFBins = 1024;
-
-        // Transfer function per channel (min,max, start color, end color)
-        this.channelTF = [];
-        for (let i = 0; i < this.config["imageData"].length; i = i + 1) {
-
-            const start_color = d3.rgb(0, 0, 0);
-            const end_color = d3.rgb(255, 255, 255);
-
-            const tf_def = this.createTFArray(0, 65535, start_color, end_color, this.numTFBins);
-            tf_def.name = this.config['imageData'][i].name;
-
-            this.channelTF.push(tf_def);
-        }
 
         // Applying TF to selection, subset, or all
         this.show_subset = false;

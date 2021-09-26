@@ -37,8 +37,14 @@ async function init(conf) {
     console.log('Starting', new Date());
     config = conf;
     //channel information
-    for (let idx = 0; idx < config["imageData"].length; idx++) {
-        imageChannels[config["imageData"][idx].fullname] = idx;
+    let imageChannelData;
+    if (!conf?.combined) {
+        imageChannelData = config["imageData"];
+    } else {
+        imageChannelData = conf['combined_images'][0]["imageData"];
+    }
+    for (let idx = 0; idx <imageChannelData.length; idx++) {
+        imageChannels[imageChannelData[idx].fullname] = idx;
     }
     //INIT DATA LAYER
     console.log('Starting Init', new Date());

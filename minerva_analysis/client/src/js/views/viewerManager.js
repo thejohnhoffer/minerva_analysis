@@ -66,37 +66,93 @@ export class ViewerManager {
 
         let maxLevel = this.imageViewer.config['maxLevel'] - 1;
         // Add tiled image
-        this.viewer.addTiledImage({
-            tileSource: {
-                height: this.imageViewer.config['height'],
-                width: this.imageViewer.config['width'],
-                maxLevel: maxLevel,
-                tileWidth: this.imageViewer.config['tileWidth'],
-                tileHeight: this.imageViewer.config['tileHeight'],
-                getTileUrl: function (level, x, y) {
-                    return `${src}${maxLevel - level}/${x}_${y}.png`
+        if (!this.imageViewer.config?.combined) {
+            this.viewer.addTiledImage({
+                tileSource: {
+                    height: this.imageViewer.config['height'],
+                    width: this.imageViewer.config['width'],
+                    maxLevel: maxLevel,
+                    tileWidth: this.imageViewer.config['tileWidth'],
+                    tileHeight: this.imageViewer.config['tileHeight'],
+                    getTileUrl: function (level, x, y) {
+                        return `${src}${maxLevel - level}/${x}_${y}.png`
+                    }
+                },
+                // index: 0,
+                opacity: 1,
+                preload: true,
+                success: (e) => {
+                    // Define url and suburl
+                    const itemidx = this.viewer.world.getItemCount() - 1;
+                    this.viewer.world.getItemAt(itemidx).source['channelUrl'] = src
+                    const url = src;
+                    const group = url.split("/");
+                    const sub_url = group[group.length - 2];
+                    // Attach
+                    this.imageViewer.currentChannels[srcIdx] = {
+                        "url": url,
+                        "sub_url": sub_url,
+                        "color": d3.color("white"),
+                        "range": dataLayer.getImageBitRange(true)
+                    };
+                    this.viewer_channels[srcIdx] = {
+                        "url": url,
+                        "sub_url": sub_url,
+                        'name': name,
+                        'short_name': name_short
+                    };
                 }
-            },
-            // index: 0,
-            opacity: 1,
-            preload: true,
-            success: (e) => {
-                // Define url and suburl
-                const itemidx = this.viewer.world.getItemCount() - 1;
-                this.viewer.world.getItemAt(itemidx).source['channelUrl'] = src
-                const url = src;
-                const group = url.split("/");
-                const sub_url = group[group.length - 2];
-                // Attach
-                this.imageViewer.currentChannels[srcIdx] = {
-                    "url": url,
-                    "sub_url": sub_url,
-                    "color": d3.color("white"),
-                    "range": dataLayer.getImageBitRange(true)
-                };
-                this.viewer_channels[srcIdx] = {"url": url, "sub_url": sub_url, 'name': name, 'short_name': name_short};
-            }
-        });
+            });
+        } else {
+            this.imageViewer.config.combined_images.forEach((elemImage, i) => {
+                if (elemImage['imageData'][0]["src"] && elemImage['imageData'][0]["src"] !== '') {
+                    const src = elemImage["imageData"][srcIdx]["src"];
+
+                    let maxLevel = elemImage['maxLevel'] - 1;
+                    this.viewer.addTiledImage({
+                        tileSource: {
+                            height: elemImage['height'],
+                            width: elemImage['width'],
+                            maxLevel: maxLevel,
+                            maxImageCacheCount: 50,
+                            tileWidth: elemImage['tileWidth'],
+                            tileHeight: elemImage['tileHeight'],
+                            getTileUrl: function (level, x, y) {
+                                return `${src}${maxLevel - level}/${x}_${y}.png`
+                            }
+                        },
+                        x: i % 2,
+                        y: Math.floor(i / 2),
+                        height: 0.9,
+                        opacity: 1,
+                        preload: true,
+                        success: (e) => {
+                            // Define url and suburl
+                            const itemidx = this.viewer.world.getItemCount() - 1;
+                            this.viewer.world.getItemAt(itemidx).source['channelUrl'] = src
+                            const url = src;
+                            const group = url.split("/");
+                            const sub_url = group[group.length - 2];
+                            // Attach
+                            this.imageViewer.currentChannels[srcIdx] = {
+                                "url": url,
+                                "sub_url": sub_url,
+                                "color": d3.color("white"),
+                                "range": dataLayer.getImageBitRange(true)
+                            };
+                            this.viewer_channels[srcIdx] = {
+                                "url": url,
+                                "sub_url": sub_url,
+                                'name': name,
+                                'short_name': name_short
+                            };
+                        }
+                    });
+                }
+            })
+        }
+
+
     }
 
     /**
@@ -171,40 +227,77 @@ export class ViewerManager {
         const self = this;
 
         // Load label image in background if it exists
-        if (this.imageViewer.config["imageData"][0]["src"] && this.imageViewer.config["imageData"][0]["src"] !== '') {
-            let url = this.imageViewer.config["imageData"][0]["src"];
-            let maxLevel = this.imageViewer.config['maxLevel'] - 1;
-            this.viewer.addTiledImage({
-                tileSource: {
-                    height: this.imageViewer.config['height'],
-                    width: this.imageViewer.config['width'],
-                    maxLevel: maxLevel,
-                    maxImageCacheCount: 50,
-                    tileWidth: this.imageViewer.config['tileWidth'],
-                    tileHeight: this.imageViewer.config['tileHeight'],
-                    getTileUrl: function (level, x, y) {
-                        return `${url}${maxLevel - level}/${x}_${y}.png`
+        if (!this.imageViewer.config?.combined) {
+            if (this.imageViewer.config["imageData"][0]["src"] && this.imageViewer.config["imageData"][0]["src"] !== '') {
+                let url = this.imageViewer.config["imageData"][0]["src"];
+                let maxLevel = this.imageViewer.config['maxLevel'] - 1;
+                this.viewer.addTiledImage({
+                    tileSource: {
+                        height: this.imageViewer.config['height'],
+                        width: this.imageViewer.config['width'],
+                        maxLevel: maxLevel,
+                        maxImageCacheCount: 50,
+                        tileWidth: this.imageViewer.config['tileWidth'],
+                        tileHeight: this.imageViewer.config['tileHeight'],
+                        getTileUrl: function (level, x, y) {
+                            return `${url}${maxLevel - level}/${x}_${y}.png`
+                        }
+                    },
+                    index: 0,
+                    opacity: 1,
+                    success: (e) => {
+                        const url0 = url
+                        this.viewer.world.getItemAt(0).source['channelUrl'] = url;
+                        this.imageViewer.labelChannel["url"] = url0;
+                        const group = url0.split("/");
+                        this.imageViewer.labelChannel["sub_url"] = group[group.length - 2];
+                        let source = e.item.source;
+                        // Open Event is Necessary for ViaWebGl to init
+                        self.viewer.raiseEvent('open', {source: source});
                     }
-                },
-                index: 0,
-                opacity: 1,
-                success: (e) => {
-                    const url0 = url
-                    this.viewer.world.getItemAt(0).source['channelUrl'] = url;
-                    this.imageViewer.labelChannel["url"] = url0;
-                    const group = url0.split("/");
-                    this.imageViewer.labelChannel["sub_url"] = group[group.length - 2];
-                    let source = e.item.source;
-                    // Open Event is Necessary for ViaWebGl to init
-                    self.viewer.raiseEvent('open', {source: source});
-                }
-            });
+                });
+            } else {
+                this.imageViewer.noLabel = true;
+            }
         } else {
-            this.imageViewer.noLabel = true;
+            this.imageViewer.config.combined_images.forEach((elemImage, i) => {
+                if (elemImage['imageData'][0]["src"] && elemImage['imageData'][0]["src"] !== '') {
+                    let url = elemImage['imageData'][0]["src"];
+                    let maxLevel = elemImage['maxLevel'] - 1;
+                    this.viewer.addTiledImage({
+                        tileSource: {
+                            height: elemImage['height'],
+                            width: elemImage['width'],
+                            maxLevel: maxLevel,
+                            maxImageCacheCount: 50,
+                            tileWidth: elemImage['tileWidth'],
+                            tileHeight: elemImage['tileHeight'],
+                            getTileUrl: function (level, x, y) {
+                                return `${url}${maxLevel - level}/${x}_${y}.png`
+                            }
+                        },
+                        index: i,
+                        x: i % 2,
+                        y: Math.floor(i / 2),
+                        height: 0.9,
+                        opacity: 1,
+                        success: (e) => {
+                            const url0 = url
+                            this.viewer.world.getItemAt(0).source['channelUrl'] = url;
+                            this.imageViewer.labelChannel["url"] = url0;
+                            const group = url0.split("/");
+                            this.imageViewer.labelChannel["sub_url"] = group[group.length - 2];
+                            let source = e.item.source;
+                            // Open Event is Necessary for ViaWebGl to init
+                            self.viewer.raiseEvent('open', {source: source});
+                        }
+                    });
+                } else {
+                    this.imageViewer.noLabel = true;
+                }
+            })
         }
     }
-
-
 
 
 }

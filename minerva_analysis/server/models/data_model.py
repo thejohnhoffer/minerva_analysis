@@ -33,6 +33,8 @@ config = None
 seg = None
 channels = None
 metadata = None
+tile_width = None
+tile_height = None
 
 
 def init(datasource_name):
@@ -46,6 +48,8 @@ def load_datasource(datasource_name, reload=False):
     global seg
     global channels
     global metadata
+    global tile_width
+    global tile_height
     if source == datasource_name and datasource is not None and reload is False:
         return
     load_config()
@@ -58,18 +62,35 @@ def load_datasource(datasource_name, reload=False):
     datasource = datasource.replace(-np.Inf, 0)
     if reload or ball_tree is None:
         load_ball_tree(datasource_name, reload=reload)
-    if config[datasource_name]['segmentation'].endswith('.zarr'):
-        seg = zarr.load(config[datasource_name]['segmentation'])
+
+    if 'combined' in config[datasource_name]:
+        seg = {}
+        channels = {}
+        tile_width = {}
+        tile_height = {}
+        for image in config[datasource_name]['combined_images']:
+            tile_width[image['name']] = int(image['tileWidth'])
+            tile_height[image['name']] = int(image['tileHeight'])
+            seg_io = tf.TiffFile(image['segmentation'], is_ome=False)
+            channel_io = tf.TiffFile(image['channelFile'], is_ome=False)
+            seg[image['name']] = zarr.open(seg_io.series[0].aszarr())
+            channels[image['name']] = zarr.open(channel_io.series[0].aszarr())
+
     else:
-        seg_io = tf.TiffFile(config[datasource_name]['segmentation'], is_ome=False)
-        seg = zarr.open(seg_io.series[0].aszarr())
-    channel_io = tf.TiffFile(config[datasource_name]['channelFile'], is_ome=False)
-    try:
-        xml = channel_io.pages[0].tags['ImageDescription'].value
-        metadata = from_xml(xml).images[0].pixels
-    except:
-        metadata = {}
-    channels = zarr.open(channel_io.series[0].aszarr())
+        tile_width = int(config[datasource_name]['tileWidth'])
+        tile_height = int(config[datasource_name]['tileHeight'])
+        if config[datasource_name]['segmentation'].endswith('.zarr'):
+            seg = zarr.load(config[datasource_name]['segmentation'])
+        else:
+            seg_io = tf.TiffFile(config[datasource_name]['segmentation'], is_ome=False)
+            seg = zarr.open(seg_io.series[0].aszarr())
+        channel_io = tf.TiffFile(config[datasource_name]['channelFile'], is_ome=False)
+        try:
+            xml = channel_io.pages[0].tags['ImageDescription'].value
+            metadata = from_xml(xml).images[0].pixels
+        except:
+            metadata = {}
+        channels = zarr.open(channel_io.series[0].aszarr())
     init_clusters(datasource_name)
 
 
@@ -338,7 +359,11 @@ def get_channel_names(datasource_name, shortnames=True):
     if datasource_name != source:
         load_datasource(datasource_name)
     if shortnames:
-        channel_names = [channel['name'] for channel in config[datasource_name]['imageData'][1:]]
+        if 'combined' in config[datasource_name]:
+            channel_names = [channel['name'] for channel in
+                             config[datasource_name]['combined_images'][0]['imageData'][1:]]
+        else:
+            channel_names = [channel['name'] for channel in config[datasource_name]['imageData'][1:]]
     else:
         channel_names = [channel['fullname'] for channel in config[datasource_name]['imageData'][1:]]
     return channel_names
@@ -699,38 +724,56 @@ def get_datasource_description(datasource_name):
     return description
 
 
-def generate_zarr_png(datasource_name, channel, level, tile):
+def generate_zarr_png(datasource_name, channel, level, tile, combined_datasource=None):
     if config is None:
         load_datasource(datasource_name)
     global channels
     global seg
+    global tile_width
+    global tile_height
+    this_time = time.time()
     [tx, ty] = tile.replace('.png', '').split('_')
     tx = int(tx)
     ty = int(ty)
     level = int(level)
-    tile_width = config[datasource_name]['tileWidth']
-    tile_height = config[datasource_name]['tileHeight']
-    ix = tx * tile_width
-    iy = ty * tile_height
+    if combined_datasource:
+        image_tile_width = tile_width[datasource_name]
+        image_tile_height = tile_height[datasource_name]
+    else:
+        image_tile_width = tile_width
+        image_tile_height = tile_height
+    ix = tx * image_tile_width
+    iy = ty * image_tile_height
     segmentation = False
     try:
         channel_num = int(re.match(r".*_(\d*)$", channel).groups()[0])
     except AttributeError:
         segmentation = True
     if segmentation:
-        tile = seg[level][iy:iy + tile_height, ix:ix + tile_width]
+        if combined_datasource:
+            tile = seg[datasource_name][level][iy:iy + image_tile_height, ix:ix + image_tile_width]
+        else:
+            tile = seg[level][iy:iy + image_tile_height, ix:ix + image_tile_width]
 
         tile = tile.view('uint8').reshape(tile.shape + (-1,))[..., [0, 1, 2]]
         tile = np.append(tile, np.zeros((tile.shape[0], tile.shape[1], 1), dtype='uint8'), axis=2)
     else:
         if isinstance(channels, zarr.Array):
-            tile = channels[channel_num, iy:iy + tile_height, ix:ix + tile_width]
+            if combined_datasource:
+                tile = channels[datasource_name][channel_num, iy:iy + image_tile_height, ix:ix + image_tile_width]
+            else:
+                tile = channels[channel_num, iy:iy + image_tile_height, ix:ix + image_tile_width]
         else:
-            tile = channels[level][channel_num, iy:iy + tile_height, ix:ix + tile_width]
+            if combined_datasource:
+                tile = channels[datasource_name][level][channel_num, iy:iy + image_tile_height,
+                       ix:ix + image_tile_width]
+            else:
+                tile = channels[level][channel_num, iy:iy + image_tile_height, ix:ix + image_tile_width]
             tile = tile.astype('uint16')
 
     # tile = np.ascontiguousarray(tile, dtype='uint32')
     # png = tile.view('uint8').reshape(tile.shape + (-1,))[..., [2, 1, 0]]
+    print('Load Time', time.time() - this_time)
     return tile
 
 
@@ -783,6 +826,8 @@ def convertOmeTiff(filePath, channelFilePath=None, dataDirectory=None, isLabelIm
     if isLabelImg == False:
         channel_io = tf.TiffFile(str(filePath), is_ome=False)
         channels = zarr.open(channel_io.series[0].aszarr())
+        channel_io.close()
+
         if isinstance(channels, zarr.Array):
             channel_info['maxLevel'] = 1
             chunks = channels.chunks
@@ -803,8 +848,10 @@ def convertOmeTiff(filePath, channelFilePath=None, dataDirectory=None, isLabelIm
         channel_info['channel_names'] = channelNames
         return channel_info
     else:
-        channel_io = tf.TiffFile(str(channelFilePath), is_ome=False)
-        channels = zarr.open(channel_io.series[0].aszarr())
+        # channel_io = tf.TiffFile(str(channelFilePath), is_ome=False)
+        # channels = zarr.open(channel_io.series[0].aszarr())
+        # channel_io.close()
+
         directory = Path(dataDirectory + "/" + filePath.name)
         args = {}
         args['in_paths'] = [Path(filePath)]
@@ -855,7 +902,8 @@ def get_neighborhood_stats(datasource_name, indices, cluster_cells=None, fields=
         neighborhood_range = config[datasource_name]['neighborhood_range']
     else:
         neighborhood_range = 30  # default 30um
-    r = neighborhood_range / metadata.physical_size_x
+    r = neighborhood_range / 32110
+    # r = neighborhood_range / metadata.physical_size_x
     neighbors = ball_tree.query_radius(points, r=r)
     unique_neighbors = np.unique(np.concatenate(neighbors).ravel())
     border_neighbors = np.setdiff1d(unique_neighbors, cluster_cells.index.values)
